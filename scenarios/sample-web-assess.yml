@@ -1,0 +1,75 @@
+name: "Sample Web Security Assessment"
+description: "Demonstrates safe web assessment techniques including baseline requests, XSS reflection detection, and SQLi error probing"
+category: web
+mode: assess
+ownership_verification: true
+
+target:
+  type: web
+  base_url: "http://127.0.0.1:3000"
+  metadata:
+    description: "Local test web application"
+
+steps:
+  - id: "step_001_baseline"
+    type: "http_get_baseline"
+    description: "Establish baseline by requesting homepage"
+    parameters:
+      path: "/"
+    expected_evidence:
+      - "http_request_log"
+    timeout_seconds: 30
+    continue_on_failure: false
+
+  - id: "step_002_xss_search"
+    type: "reflected_xss_probe_safe"
+    description: "Test search parameter for reflected XSS"
+    parameters:
+      path: "/search"
+      parameter: "q"
+      probe_string: "<test-probe>"
+    expected_evidence:
+      - "http_request_log"
+      - "xss_reflection_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_003_sqli_id"
+    type: "sqli_error_probe_safe"
+    description: "Test ID parameter for SQL injection error messages"
+    parameters:
+      path: "/product"
+      parameter: "id"
+      probe_string: "'"
+    expected_evidence:
+      - "http_request_log"
+      - "sql_error_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_004_baseline_admin"
+    type: "http_get_baseline"
+    description: "Check for exposed admin interface"
+    parameters:
+      path: "/admin"
+    expected_evidence:
+      - "http_request_log"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_005_xss_comment"
+    type: "reflected_xss_probe_safe"
+    description: "Test comment parameter for reflected XSS"
+    parameters:
+      path: "/comment"
+      parameter: "text"
+      probe_string: "<script>test</script>"
+    expected_evidence:
+      - "http_request_log"
+      - "xss_reflection_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+att_ck_techniques:
+  - "T1190"  # Exploit Public-Facing Application
+  - "T1059.007"  # Command and Scripting Interpreter: JavaScript

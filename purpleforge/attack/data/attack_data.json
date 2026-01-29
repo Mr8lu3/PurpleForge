@@ -1,0 +1,223 @@
+{
+  "techniques": {
+    "T1190": {
+      "id": "T1190",
+      "name": "Exploit Public-Facing Application",
+      "description": "Adversaries may attempt to exploit a weakness in an Internet-facing host or system to initially access a network. The weakness in the system can be a software bug, a temporary glitch, or a misconfiguration.",
+      "tactics": ["initial-access"],
+      "platforms": ["Linux", "Windows", "macOS", "Network"],
+      "mitigations": ["M1048", "M1050", "M1051", "M1016", "M1026"],
+      "data_sources": [
+        "Application Log: Application Log Content",
+        "Network Traffic: Network Traffic Content",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1190/"
+    },
+    "T1059": {
+      "id": "T1059",
+      "name": "Command and Scripting Interpreter",
+      "description": "Adversaries may abuse command and script interpreters to execute commands, scripts, or binaries. These interfaces and languages provide ways of interacting with computer systems and are a common feature across many different platforms.",
+      "tactics": ["execution"],
+      "platforms": ["Linux", "Windows", "macOS", "Network"],
+      "mitigations": ["M1038", "M1040", "M1049", "M1026"],
+      "data_sources": [
+        "Command: Command Execution",
+        "Process: Process Creation",
+        "Script: Script Execution"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1059/"
+    },
+    "T1059.001": {
+      "id": "T1059.001",
+      "name": "PowerShell",
+      "description": "Adversaries may abuse PowerShell commands and scripts for execution. PowerShell is a powerful interactive command-line interface and scripting environment included in the Windows operating system.",
+      "tactics": ["execution"],
+      "platforms": ["Windows"],
+      "parent": "T1059",
+      "mitigations": ["M1042", "M1049", "M1045", "M1026"],
+      "data_sources": [
+        "Command: Command Execution",
+        "Process: Process Creation",
+        "Script: Script Execution"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1059/001/"
+    },
+    "T1071": {
+      "id": "T1071",
+      "name": "Application Layer Protocol",
+      "description": "Adversaries may communicate using OSI application layer protocols to avoid detection/network filtering by blending in with existing traffic. Commands to the remote system, and often the results of those commands, will be embedded within the protocol traffic between the client and server.",
+      "tactics": ["command-and-control"],
+      "platforms": ["Linux", "Windows", "macOS", "Network"],
+      "mitigations": ["M1031"],
+      "data_sources": [
+        "Network Traffic: Network Traffic Content",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1071/"
+    },
+    "T1071.001": {
+      "id": "T1071.001",
+      "name": "Web Protocols",
+      "description": "Adversaries may communicate using application layer protocols associated with web traffic to avoid detection/network filtering by blending in with existing traffic. Commands to the remote system, and often the results of those commands, will be embedded within the protocol traffic between the client and server.",
+      "tactics": ["command-and-control"],
+      "platforms": ["Linux", "Windows", "macOS"],
+      "parent": "T1071",
+      "mitigations": ["M1031"],
+      "data_sources": [
+        "Network Traffic: Network Traffic Content",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1071/001/"
+    },
+    "T1595": {
+      "id": "T1595",
+      "name": "Active Scanning",
+      "description": "Adversaries may execute active reconnaissance scans to gather information that can be used during targeting. Active scans are those where the adversary probes victim infrastructure via network traffic, as opposed to other forms of reconnaissance that do not involve direct interaction.",
+      "tactics": ["reconnaissance"],
+      "platforms": ["PRE"],
+      "mitigations": ["M1056"],
+      "data_sources": [
+        "Network Traffic: Network Traffic Content",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1595/"
+    },
+    "T1595.002": {
+      "id": "T1595.002",
+      "name": "Vulnerability Scanning",
+      "description": "Adversaries may scan victims for vulnerabilities that can be used during targeting. Vulnerability scans typically check if the configuration of a target host/application (ex: software and version) potentially aligns with the target of a specific exploit the adversary may seek to use.",
+      "tactics": ["reconnaissance"],
+      "platforms": ["PRE"],
+      "parent": "T1595",
+      "mitigations": ["M1056"],
+      "data_sources": [
+        "Network Traffic: Network Traffic Content",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1595/002/"
+    },
+    "T1046": {
+      "id": "T1046",
+      "name": "Network Service Discovery",
+      "description": "Adversaries may attempt to get a listing of services running on remote hosts and local network infrastructure devices, including those that may be vulnerable to remote software exploitation. Common methods to acquire this information include port and/or vulnerability scans using tools that are brought onto a system.",
+      "tactics": ["discovery"],
+      "platforms": ["Linux", "Windows", "macOS", "Network"],
+      "mitigations": ["M1042", "M1031", "M1030"],
+      "data_sources": [
+        "Cloud Service: Cloud Service Enumeration",
+        "Command: Command Execution",
+        "Network Traffic: Network Traffic Flow"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1046/"
+    },
+    "T1505": {
+      "id": "T1505",
+      "name": "Server Software Component",
+      "description": "Adversaries may abuse legitimate extensible development features of servers to establish persistent access to systems. Enterprise server applications may include features that allow developers to write and install software or scripts to extend the functionality of the main application.",
+      "tactics": ["persistence"],
+      "platforms": ["Linux", "Windows", "Network"],
+      "mitigations": ["M1047", "M1045", "M1018"],
+      "data_sources": [
+        "Application Log: Application Log Content",
+        "File: File Creation",
+        "File: File Modification",
+        "Network Traffic: Network Traffic Content"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1505/"
+    },
+    "T1505.003": {
+      "id": "T1505.003",
+      "name": "Web Shell",
+      "description": "Adversaries may backdoor web servers with web shells to establish persistent access to systems. A Web shell is a Web script that is placed on an openly accessible Web server to allow an adversary to use the Web server as a gateway into a network.",
+      "tactics": ["persistence"],
+      "platforms": ["Linux", "Windows", "macOS", "Network"],
+      "parent": "T1505",
+      "mitigations": ["M1042", "M1018"],
+      "data_sources": [
+        "Application Log: Application Log Content",
+        "File: File Creation",
+        "File: File Modification",
+        "Network Traffic: Network Traffic Content"
+      ],
+      "url": "https://attack.mitre.org/techniques/T1505/003/"
+    }
+  },
+  "mitigations": {
+    "M1016": {
+      "id": "M1016",
+      "name": "Vulnerability Scanning",
+      "description": "Vulnerability scanning is used to find potentially exploitable software vulnerabilities to remediate them."
+    },
+    "M1018": {
+      "id": "M1018",
+      "name": "User Account Management",
+      "description": "Manage the creation, modification, use, and permissions associated to user accounts."
+    },
+    "M1026": {
+      "id": "M1026",
+      "name": "Privileged Account Management",
+      "description": "Manage the creation, modification, use, and permissions associated to privileged accounts, including SYSTEM and root."
+    },
+    "M1030": {
+      "id": "M1030",
+      "name": "Network Segmentation",
+      "description": "Architect sections of the network to isolate critical systems, functions, or resources."
+    },
+    "M1031": {
+      "id": "M1031",
+      "name": "Network Intrusion Prevention",
+      "description": "Use intrusion detection signatures to block traffic at network boundaries."
+    },
+    "M1038": {
+      "id": "M1038",
+      "name": "Execution Prevention",
+      "description": "Block execution of code on a system through application control, and/or script blocking."
+    },
+    "M1040": {
+      "id": "M1040",
+      "name": "Behavior Prevention on Endpoint",
+      "description": "Use capabilities to prevent suspicious behavior patterns from occurring on endpoint systems."
+    },
+    "M1042": {
+      "id": "M1042",
+      "name": "Disable or Remove Feature or Program",
+      "description": "Remove or deny access to unnecessary and potentially vulnerable software to prevent abuse by adversaries."
+    },
+    "M1045": {
+      "id": "M1045",
+      "name": "Code Signing",
+      "description": "Enforce binary and application integrity with digital signature verification to prevent untrusted code from executing."
+    },
+    "M1047": {
+      "id": "M1047",
+      "name": "Audit",
+      "description": "Perform audits or scans of systems, permissions, insecure software, insecure configurations, etc."
+    },
+    "M1048": {
+      "id": "M1048",
+      "name": "Application Isolation and Sandboxing",
+      "description": "Restrict execution of code to a virtual environment on or in transit to an endpoint system."
+    },
+    "M1049": {
+      "id": "M1049",
+      "name": "Antivirus/Antimalware",
+      "description": "Use signatures or heuristics to detect malicious software."
+    },
+    "M1050": {
+      "id": "M1050",
+      "name": "Exploit Protection",
+      "description": "Use capabilities to detect and block conditions that may lead to or be indicative of a software exploit occurring."
+    },
+    "M1051": {
+      "id": "M1051",
+      "name": "Update Software",
+      "description": "Perform regular software updates to mitigate exploitation risk."
+    },
+    "M1056": {
+      "id": "M1056",
+      "name": "Pre-compromise",
+      "description": "This category is used for any applicable mitigation activities that apply to techniques occurring before an adversary gains Initial Access."
+    }
+  }
+}

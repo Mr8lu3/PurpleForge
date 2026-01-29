@@ -1,0 +1,25 @@
+# Core dependencies
+typer[all]>=0.9.0
+pydantic>=2.5.0
+rich>=13.7.0
+pyyaml>=6.0.1
+requests>=2.31.0
+jinja2>=3.1.2
+
+# Blue Team Log Parsing
+lxml>=4.9.0  # XML parsing for Sysmon/EVTX
+python-evtx>=0.7.4  # Windows Event Log parsing
+
+# Report Export Formats
+python-docx>=0.8.11  # Word documents
+weasyprint>=60.0  # PDF generation
+Pillow>=10.0.0  # Image handling
+markdown>=3.5  # Markdown processing
+
+# Binary Analysis
+pefile>=2023.2.7  # PE file analysis
+pyelftools>=0.30  # ELF file analysis
+
+# Optional dependencies (install separately if needed)
+# yara-python>=4.3.0  # YARA scanning (requires libfuzzy)
+# ssdeep>=3.4  # Fuzzy hashing (requires libfuzzy)

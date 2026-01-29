@@ -1,0 +1,195 @@
+# PurpleForge Incident Report
+
+**Run ID:** {{ run_id }}
+**Generated:** {{ generated_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+**Tool Version:** {{ tool_version }}
+**Status:** {{ status }}
+
+---
+
+## Executive Summary
+
+This report documents a controlled security assessment scenario executed using PurpleForge.
+
+**Assessment Period:** {{ started_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}{% if completed_at %} to {{ completed_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}{% endif %}
+
+{% if scenario %}
+**Scenario:** {{ scenario.name }}
+**Category:** {{ scenario.category }}
+**Mode:** {{ scenario.mode }}
+{% endif %}
+
+---
+
+## Target Information
+
+{% if target %}
+{% if target.base_url %}
+**Target URL:** `{{ target.base_url }}`
+{% endif %}
+{% if target.verification_status %}
+**Verification Status:** {{ target.verification_status }}
+{% endif %}
+{% else %}
+No target information available.
+{% endif %}
+
+---
+
+## Scenario Overview
+
+{% if scenario %}
+**Description:** {{ scenario.description }}
+
+### ATT&CK Techniques
+{% if scenario.att_ck_techniques %}
+{% for technique in scenario.att_ck_techniques %}
+- {{ technique }}
+{% endfor %}
+{% else %}
+No ATT&CK techniques specified.
+{% endif %}
+
+### Steps Executed
+{% if scenario.steps %}
+{% for step in scenario.steps %}
+#### Step {{ loop.index }}: {{ step.id }}
+- **Type:** {{ step.type }}
+- **Description:** {{ step.description }}
+- **Expected Evidence:** {% if step.expected_evidence %}{{ step.expected_evidence | join(', ') }}{% else %}None{% endif %}
+{% endfor %}
+{% else %}
+No steps defined.
+{% endif %}
+{% else %}
+Scenario information not available.
+{% endif %}
+
+---
+
+## Coverage Analysis
+
+{% if coverage %}
+**Total Steps:** {{ coverage.total_steps }}
+**Steps with Evidence:** {{ coverage.steps_with_evidence }}
+**Coverage:** {{ "%.1f"|format(coverage.coverage_percentage) }}%
+
+### Step Coverage Details
+{% if coverage.step_coverage %}
+| Step ID | Type | Has Evidence | Evidence Count |
+|---------|------|--------------|----------------|
+{% for step in coverage.step_coverage %}
+| {{ step.step_id }} | {{ step.step_type }} | {{ "Yes" if step.has_evidence else "No" }} | {{ step.evidence_count }} |
+{% endfor %}
+{% endif %}
+{% else %}
+Coverage analysis not available.
+{% endif %}
+
+---
+
+## Timeline
+
+{% if timeline %}
+Total events: {{ timeline | length }}
+
+{% for event in timeline %}
+### {{ event.timestamp }}
+{% if event.type == "ground_truth" %}
+**Ground Truth** - Step: {{ event.step_id }} ({{ event.step_type }})
+- Success: {{ "Yes" if event.success else "No" }}
+- Expected: {{ event.expected_evidence | join(', ') if event.expected_evidence else 'None' }}
+{% elif event.type == "evidence" %}
+**Evidence** - {{ event.event_type }} (Step: {{ event.step_id }})
+{% if event.data %}
+- Method: {{ event.data.method if event.data.method else 'N/A' }}
+- URL: {{ event.data.url if event.data.url else 'N/A' }}
+- Status: {{ event.data.status_code if event.data.status_code else 'N/A' }}
+{% endif %}
+{% endif %}
+
+{% endfor %}
+{% else %}
+Timeline not available.
+{% endif %}
+
+---
+
+## Detection Recommendations
+
+Based on the executed scenario, consider implementing the following detection mechanisms:
+
+### Generic Web Assessment Detections
+
+1. **HTTP Traffic Monitoring**
+   - Monitor for unusual URL patterns or query parameters
+   - Alert on excessive requests from single sources
+   - Track response status codes for anomalies
+
+2. **Web Application Firewall (WAF)**
+   - Configure rules to detect common injection patterns
+   - Monitor for unusual characters in parameters
+   - Track and rate-limit suspicious behavior
+
+3. **Log Analysis**
+   - Collect and analyze web server access logs
+   - Correlate with application logs
+   - Set up alerts for error patterns
+
+{% if scenario and scenario.steps %}
+### Step-Specific Recommendations
+
+{% for step in scenario.steps %}
+#### {{ step.type }}
+{% if step.type == "http_get_baseline" %}
+- Monitor baseline HTTP GET requests for reconnaissance patterns
+- Track frequency and timing of requests
+{% elif step.type == "reflected_xss_probe_safe" %}
+- Implement input validation on all user-supplied parameters
+- Deploy Content Security Policy (CSP) headers
+- Monitor for HTML/script tags in request parameters
+- Alert on unusual character sequences in URLs
+{% elif step.type == "sqli_error_probe_safe" %}
+- Implement parameterized queries/prepared statements
+- Monitor database error logs for syntax errors
+- Alert on SQL keywords in request parameters
+- Track failed database queries
+{% endif %}
+
+{% endfor %}
+{% endif %}
+
+---
+
+## Platform Information
+
+**Operating System:** {{ platform.os if platform.os else 'Unknown' }}
+**OS Version:** {{ platform.os_version if platform.os_version else 'Unknown' }}
+**Python Version:** {{ platform.python_version if platform.python_version else 'Unknown' }}
+
+---
+
+## Artifacts
+
+Run artifacts are located at:
+```
+{{ run_dir if run_dir else 'Unknown' }}
+```
+
+Key files:
+- `meta.json` - Run metadata
+- `scenario.yaml` - Executed scenario
+- `telemetry/web_requests.jsonl` - HTTP request logs
+- `telemetry/normalized_events.jsonl` - Normalized event stream
+- `correlation/timeline.json` - Event timeline
+- `correlation/coverage.json` - Coverage metrics
+
+---
+
+## Disclaimer
+
+This report documents a controlled security assessment conducted in a lab environment with explicit authorization. All activities were logged and auditable. This report is for educational and defensive security purposes only.
+
+---
+
+*Report generated by PurpleForge v{{ tool_version }}*

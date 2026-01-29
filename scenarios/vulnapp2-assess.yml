@@ -1,0 +1,145 @@
+name: "VulnApp 2.0 Security Assessment"
+description: "Demonstrates detection of path traversal, open redirect, IDOR, and information disclosure vulnerabilities"
+category: web
+mode: assess
+ownership_verification: true
+
+target:
+  type: web
+  base_url: "http://127.0.0.1:3000"
+  metadata:
+    description: "VulnApp 2.0 test application with different vulnerability set"
+
+steps:
+  - id: "step_001_baseline"
+    type: "http_get_baseline"
+    description: "Establish baseline by requesting homepage"
+    parameters:
+      path: "/"
+    expected_evidence:
+      - "http_request_log"
+    timeout_seconds: 30
+    continue_on_failure: false
+
+  - id: "step_002_robots"
+    type: "http_get_baseline"
+    description: "Check robots.txt for sensitive path disclosure"
+    parameters:
+      path: "/robots.txt"
+    expected_evidence:
+      - "http_request_log"
+      - "sensitive_path_disclosure"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_003_path_traversal"
+    type: "path_traversal_probe_safe"
+    description: "Test file parameter for path traversal vulnerability"
+    parameters:
+      path: "/file"
+      parameter: "name"
+      probe_string: "../../../etc/passwd"
+    expected_evidence:
+      - "http_request_log"
+      - "path_traversal_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_004_open_redirect"
+    type: "open_redirect_probe_safe"
+    description: "Test redirect endpoint for open redirect vulnerability"
+    parameters:
+      path: "/redirect"
+      parameter: "url"
+      probe_string: "https://evil.com"
+    expected_evidence:
+      - "http_request_log"
+      - "open_redirect_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_005_idor"
+    type: "idor_probe_safe"
+    description: "Test user endpoint for IDOR vulnerability by accessing different user IDs"
+    parameters:
+      path: "/user"
+      parameter: "id"
+      probe_values: ["1", "2", "3"]
+    expected_evidence:
+      - "http_request_log"
+      - "idor_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_006_api_exposure"
+    type: "http_get_baseline"
+    description: "Check for mass data exposure via API endpoint"
+    parameters:
+      path: "/api/users"
+    expected_evidence:
+      - "http_request_log"
+      - "data_exposure_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_007_debug_endpoint"
+    type: "http_get_baseline"
+    description: "Check for exposed debug endpoint with sensitive information"
+    parameters:
+      path: "/debug"
+    expected_evidence:
+      - "http_request_log"
+      - "debug_info_exposure"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_008_env_file"
+    type: "sensitive_file_probe_safe"
+    description: "Check for exposed .env configuration file"
+    parameters:
+      path: "/.env"
+    expected_evidence:
+      - "http_request_log"
+      - "sensitive_file_exposure"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_009_backup_file"
+    type: "sensitive_file_probe_safe"
+    description: "Check for exposed database backup"
+    parameters:
+      path: "/backup/db.sql"
+    expected_evidence:
+      - "http_request_log"
+      - "sensitive_file_exposure"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_010_git_exposure"
+    type: "sensitive_file_probe_safe"
+    description: "Check for exposed .git configuration"
+    parameters:
+      path: "/.git/config"
+    expected_evidence:
+      - "http_request_log"
+      - "git_exposure_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+  - id: "step_011_directory_listing"
+    type: "http_get_baseline"
+    description: "Check for enabled directory listing"
+    parameters:
+      path: "/uploads"
+    expected_evidence:
+      - "http_request_log"
+      - "directory_listing_detection"
+    timeout_seconds: 30
+    continue_on_failure: true
+
+att_ck_techniques:
+  - "T1190"   # Exploit Public-Facing Application
+  - "T1083"   # File and Directory Discovery
+  - "T1082"   # System Information Discovery
+  - "T1552.001"  # Unsecured Credentials: Credentials In Files
+  - "T1213"   # Data from Information Repositories

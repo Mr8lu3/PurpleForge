@@ -1,0 +1,68 @@
+.
+├── ARCHITECTURE.md
+├── FILE_TREE.txt
+├── LICENSE
+├── MANIFEST.in
+├── PROJECT_SUMMARY.md
+├── README.md
+├── SETUP_GUIDE.md
+├── TESTING.md
+├── purpleforge
+│   ├── __init__.py
+│   ├── analysis
+│   │   └── __init__.py
+│   ├── artifacts
+│   │   └── __init__.py
+│   ├── cli
+│   │   ├── __init__.py
+│   │   ├── commands.py
+│   │   └── main.py
+│   ├── config
+│   │   ├── __init__.py
+│   │   ├── loader.py
+│   │   └── models.py
+│   ├── correlation
+│   │   ├── __init__.py
+│   │   └── engine.py
+│   ├── reporting
+│   │   ├── __init__.py
+│   │   ├── generator.py
+│   │   └── templates
+│   ├── runners
+│   │   ├── __init__.py
+│   │   └── web.py
+│   ├── scenarios
+│   │   ├── __init__.py
+│   │   ├── loader.py
+│   │   └── models.py
+│   ├── telemetry
+│   │   ├── __init__.py
+│   │   └── collector.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── exceptions.py
+│   │   ├── logging.py
+│   │   └── platform.py
+│   ├── verification
+│   │   ├── __init__.py
+│   │   └── verifier.py
+│   └── workspace
+│       ├── __init__.py
+│       └── manager.py
+├── pyproject.toml
+├── pytest.ini
+├── quickstart.ps1
+├── requirements-dev.txt
+├── requirements.txt
+├── scenarios
+│   └── sample-web-assess.yml
+├── setup.py
+├── tests
+│   ├── __init__.py
+│   ├── test_reporting.py
+│   ├── test_scenarios.py
+│   ├── test_verification.py
+│   └── test_workspace.py
+└── validate_install.py
+
+17 directories, 49 files
