@@ -11,7 +11,7 @@ try:
 except ImportError:
     EVTX_AVAILABLE = False
 
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET  # XML hardened against XXE/billion-laughs
 
 from purpleforge.blueteam.normalizer import BlueTeamEvent
 from purpleforge.utils.exceptions import PurpleForgeError

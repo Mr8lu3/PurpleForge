@@ -78,11 +78,13 @@ def is_local_target(base_url: str) -> bool:
     parsed = urlparse(base_url)
     hostname = parsed.hostname or ""
 
+    # These strings identify *targets that are local to the operator* — they
+    # are NOT bound by this process. False positive flagged by bandit B104.
     local_indicators = [
         "localhost",
         "127.0.0.1",
         "::1",
-        "0.0.0.0",
+        "0.0.0.0",  # nosec B104 - matched against remote hostname, not bound
         ".local",
     ]
 

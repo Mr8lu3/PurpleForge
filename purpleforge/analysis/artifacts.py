@@ -48,8 +48,10 @@ def calculate_hashes(file_path: Path) -> ArtifactHashes:
     Returns:
         ArtifactHashes with MD5, SHA1, SHA256, and optionally ssdeep
     """
-    md5_hash = hashlib.md5()
-    sha1_hash = hashlib.sha1()
+    # MD5/SHA1 retained for forensic artifact identification (matches IR
+    # tooling and threat-intel feeds), not for security guarantees.
+    md5_hash = hashlib.md5(usedforsecurity=False)  # noqa: S324
+    sha1_hash = hashlib.sha1(usedforsecurity=False)  # noqa: S324
     sha256_hash = hashlib.sha256()
 
     with open(file_path, "rb") as f:

@@ -1,6 +1,6 @@
 """Sysmon XML/EVTX log parser."""
 
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET  # XML hardened against XXE/billion-laughs
 from datetime import datetime
 from pathlib import Path
 from typing import List

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import datetime
 
-from jinja2 import Environment, BaseLoader
+from jinja2 import Environment, BaseLoader, select_autoescape
 
 from purpleforge.utils.logging import get_logger
 
@@ -567,7 +567,10 @@ def export_html(
     Returns:
         Path to created HTML file
     """
-    env = Environment(loader=BaseLoader())
+    env = Environment(
+        loader=BaseLoader(),
+        autoescape=select_autoescape(enabled_extensions=("html", "xml"), default=True),
+    )
     template = env.from_string(HTML_TEMPLATE)
 
     # Prepare template data
