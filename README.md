@@ -37,8 +37,9 @@ PurpleForge is built with safety as the primary concern:
 ### Windows 11 Quick Start
 
 ```powershell
-# Clone or download the project
-cd D:\PurpleForge
+# Clone the repository (use any drive/folder you like)
+git clone https://github.com/Mr8lu3/PurpleForge.git
+cd PurpleForge
 
 # Create virtual environment
 python -m venv .venv
@@ -234,8 +235,8 @@ Tests for SQL injection error messages without data extraction.
 Configuration is stored at `%USERPROFILE%\.purpleforge\config.yml`:
 
 ```yaml
-workspace_dir: D:\PurpleForge\runs
-scenarios_dir: D:\PurpleForge\scenarios
+workspace_dir: <path-to-your-clone>\runs
+scenarios_dir: <path-to-your-clone>\scenarios
 log_level: INFO
 default_timeout: 30
 max_response_log_size: 200
