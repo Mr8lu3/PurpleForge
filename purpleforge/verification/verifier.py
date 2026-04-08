@@ -85,7 +85,7 @@ def is_local_target(base_url: str) -> bool:
         "localhost",
         "127.0.0.1",
         "::1",
-        "0.0.0.0",
+        "0.0.0.0",  # nosec B104 - matched against remote hostname, not bound
         ".local",
     ]
 
