@@ -21,7 +21,7 @@ from purpleforge.cli.main import app
 from purpleforge.mirror.crawler import CrawlManifest, PageRecord
 from purpleforge.utils.exceptions import MirrorError
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 
 # ---------------------------------------------------------------------------

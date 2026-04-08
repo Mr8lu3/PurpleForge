@@ -17,7 +17,7 @@ from typer.testing import CliRunner
 from purpleforge.cli.main import app
 from purpleforge.evaluation.dataset import LabelledDataset, DatasetItem, ExpectedDetection
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 # ---------------------------------------------------------------------------
 # Fixtures

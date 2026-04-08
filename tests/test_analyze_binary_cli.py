@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 from purpleforge.cli.main import app
 from purpleforge.utils.exceptions import AnalysisError
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 
 def _create_binary(tmp_path: Path, name: str = "sample.exe") -> Path:
