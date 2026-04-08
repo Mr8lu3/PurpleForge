@@ -15,6 +15,8 @@ class Config(BaseModel):
     log_level: str = Field(default="INFO")
     default_timeout: int = Field(default=30, gt=0, le=300)
     max_response_log_size: int = Field(default=200, gt=0, le=10000)
+    redaction_enabled: bool = Field(default=True)
+    audit_log_enabled: bool = Field(default=True)
 
     @field_validator("workspace_dir", "scenarios_dir", mode="before")
     @classmethod

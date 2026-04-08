@@ -35,10 +35,15 @@ dependencies = [
 dev = [
     "pytest>=7.4.3",
     "pytest-mock>=3.12.0",
+    "pytest-cov>=4.1.0",
     "black>=23.12.0",
     "mypy>=1.7.1",
     "types-pyyaml>=6.0.12",
     "types-requests>=2.31.0",
+    "ruff>=0.3.0",
+    "bandit>=1.7.7",
+    "pip-audit>=2.7.0",
+    "cyclonedx-bom>=4.4.0",
 ]
 
 [project.scripts]
@@ -46,6 +51,11 @@ purpleforge = "purpleforge.cli.main:app"
 
 [tool.setuptools.packages.find]
 include = ["purpleforge*"]
+
+[project.entry-points."purpleforge.step_handlers"]
+# Third-party plugins register here. Built-ins live in purpleforge.runners.builtin_handlers.
+# Example (from a third-party pyproject.toml):
+#   http_head_baseline = "purpleforge_example_plugin.handlers"
 
 [tool.black]
 line-length = 100
@@ -63,3 +73,23 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Conservative selection: errors, pyflakes, and warnings only.
+# Avoids blowing up existing code with opinionated style rules.
+select = ["E", "F", "W"]
+
+[tool.coverage.run]
+source = ["purpleforge"]
+
+[tool.coverage.report]
+# Measured baseline: 62% total (2026-04-07, after adding smoke tests).
+# Coverage gate in CI is set at 60% — a 2-point buffer below the baseline.
+# Previously 0%-coverage modules detections/ and reporting/exporters/ are now
+# covered by tests/test_detections_smoke.py and tests/test_reporting_exporters_smoke.py.
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+]

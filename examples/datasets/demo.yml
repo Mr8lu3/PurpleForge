@@ -1,0 +1,20 @@
+name: "Demo Evaluation Dataset"
+description: >
+  Minimal labelled dataset for PurpleForge reproducibility demonstration.
+  References the demo_baseline scenario with a single expected detection label.
+  Suitable for running: purpleforge evaluate examples/datasets/demo.yml --runs 3
+version: "1.0"
+
+items:
+  - scenario: "examples/scenarios/demo_baseline.yml"
+    target: "http://localhost"
+    expected_detections:
+      - step_id: "step_001_baseline"
+        should_detect: true
+        max_mttd_seconds: 60.0
+    att_ck_technique_map:
+      "step_001_baseline": "T1595.001"
+    tags:
+      - "demo"
+      - "baseline"
+      - "reproducibility"

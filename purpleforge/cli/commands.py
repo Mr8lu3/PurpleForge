@@ -23,7 +23,7 @@ from purpleforge.reporting import ReportGenerator
 from purpleforge.runners import WebRunner
 from purpleforge.scenarios import load_scenario, validate_scenario
 from purpleforge.scenarios.models import ScenarioMode, TargetType
-from purpleforge.utils.exceptions import PurpleForgeError, VerificationError
+from purpleforge.utils.exceptions import PurpleForgeError, VerificationError, AnalysisError, MirrorError
 from purpleforge.utils.logging import setup_logging, console, error_console
 from purpleforge.utils.platform import get_user_config_dir
 from purpleforge.verification import (
@@ -952,4 +952,642 @@ def export_report_command(run_id: str, format: str, output: Optional[Path]) -> N
 
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+def analyze_binary_command(
+    binary_path: Path,
+    run_id: Optional[str],
+    output: Optional[Path],
+    timeout: int,
+) -> None:
+    """
+    Static binary analysis using Ghidra (defensive only).
+
+    Authorized binaries only. Produces normalized findings for inclusion in reports.
+    Output location precedence: --run-id > --output > ./analysis_output/<timestamp>/
+    """
+    from purpleforge.analysis.binary_analyzer import BinaryAnalyzer
+    from purpleforge.analysis.findings_schema import summarize
+
+    # Resolve output directory
+    if run_id is not None:
+        try:
+            config = load_config()
+            run_dir = config.workspace_dir / run_id
+        except Exception:
+            run_dir = Path("runs") / run_id
+
+        if not run_dir.exists():
+            error_console.print(
+                f"[bold red]Error:[/bold red] Run directory not found: {run_dir}"
+            )
+            error_console.print(
+                "[yellow]Hint:[/yellow] Run 'purpleforge list-runs' to see available run IDs."
+            )
+            raise typer.Exit(code=1)
+
+        resolved_output = run_dir / "analysis"
+    elif output is not None:
+        resolved_output = output.resolve()
+    else:
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        resolved_output = Path("./analysis_output") / timestamp
+
+    analyzer = BinaryAnalyzer()
+
+    output_console.print(
+        f"[cyan]Analyzing binary (defensive static analysis, authorized use only):[/cyan] {binary_path}"
+    )
+    output_console.print(f"[cyan]Output directory:[/cyan] {resolved_output}")
+
+    try:
+        findings = analyzer.analyze(binary_path, resolved_output, timeout=timeout)
+    except AnalysisError as e:
+        error_console.print(
+            Panel(
+                f"[bold red]{e.message}[/bold red]",
+                title="Analysis Error",
+                border_style="red",
+            )
+        )
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+
+    summary = summarize(findings)
+
+    # Severity summary table
+    sev_table = Table(title="Findings by Severity")
+    sev_table.add_column("Severity", style="cyan")
+    sev_table.add_column("Count", style="white", justify="right")
+    by_sev = summary.get("by_severity", {})
+    sev_table.add_row("[red]high[/red]", str(by_sev.get("high", 0)))
+    sev_table.add_row("[yellow]medium[/yellow]", str(by_sev.get("medium", 0)))
+    sev_table.add_row("[green]low[/green]", str(by_sev.get("low", 0)))
+    sev_table.add_row("[bold]TOTAL[/bold]", str(summary.get("total", 0)))
+    output_console.print(sev_table)
+
+    # Category summary table
+    by_cat = summary.get("by_category", {})
+    if by_cat:
+        cat_table = Table(title="Findings by Category")
+        cat_table.add_column("Category", style="cyan")
+        cat_table.add_column("Count", style="white", justify="right")
+        for cat, count in sorted(by_cat.items(), key=lambda x: -x[1]):
+            cat_table.add_row(cat, str(count))
+        output_console.print(cat_table)
+
+    output_console.print(
+        f"[bold green]Analysis complete.[/bold green] "
+        f"{summary.get('total', 0)} finding(s) written to "
+        f"[cyan]{resolved_output / 'binary_findings.json'}[/cyan]"
+    )
+
+
+def evaluate_command(
+    dataset_path: Path,
+    runs: int,
+    workspace_dir: Optional[Path],
+    output_dir: Optional[Path],
+) -> None:
+    """
+    Evaluate scenarios against an authorized labelled dataset.
+
+    Evaluates scenarios against authorized labelled datasets only; defensive
+    evaluation. Produces precision, recall, F1, MTTD, reproducibility
+    variance, and false-positive-rate metrics.
+    """
+    from datetime import timezone
+
+    from purpleforge.evaluation.dataset import load_dataset
+    from purpleforge.evaluation.runner import EvaluationRunner
+    from purpleforge.evaluation.report import EvaluationReport
+    from purpleforge.utils.exceptions import EvaluationError
+
+    try:
+        # Resolve workspace
+        config = load_config()
+        workspace_root = (workspace_dir or config.workspace_dir).resolve()
+        workspace_root.mkdir(parents=True, exist_ok=True)
+
+        # Resolve output directory
+        if output_dir is None:
+            ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            output_dir = Path("evaluation_output") / ts
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Load dataset
+        output_console.print(f"[cyan]Loading dataset:[/cyan] {dataset_path}")
+        dataset = load_dataset(dataset_path.resolve())
+        output_console.print(
+            f"[green]Dataset loaded:[/green] {dataset.name} "
+            f"({len(dataset.items)} item(s))"
+        )
+
+        # Run evaluation
+        output_console.print(
+            f"[cyan]Running evaluation:[/cyan] {runs} run(s) per item "
+            f"({len(dataset.items) * runs} total scenario executions)"
+        )
+        runner = EvaluationRunner(
+            dataset=dataset,
+            workspace_dir=workspace_root,
+            runs_per_item=runs,
+        )
+        observations = runner.execute()
+        output_console.print(
+            f"[green]Collected {len(observations)} observations[/green]"
+        )
+
+        # Generate report
+        report = EvaluationReport(observations=observations, dataset=dataset)
+        metrics = report.compute_all()
+
+        json_path = output_dir / "metrics.json"
+        tex_path = output_dir / "metrics.tex"
+        md_path = output_dir / "metrics.md"
+
+        report.to_json(json_path)
+        report.to_latex_table(tex_path)
+        report.to_markdown(md_path)
+
+        output_console.print(
+            f"[green]Metrics written to:[/green] {output_dir}"
+        )
+
+        # Display headline metrics in a Rich table.
+        overall = metrics["overall"]
+        mttd = metrics["mttd"]
+        repro = metrics["reproducibility"]
+        fpr = metrics["false_positive_rate"]
+
+        headline_table = Table(title="PurpleForge Evaluation — Headline Metrics")
+        headline_table.add_column("Metric", style="cyan")
+        headline_table.add_column("Value", style="bold white", justify="right")
+
+        headline_table.add_row("Precision", f"{overall['precision']:.4f}")
+        headline_table.add_row("Recall", f"{overall['recall']:.4f}")
+        headline_table.add_row("F1 Score", f"{overall['f1']:.4f}")
+        headline_table.add_row("MTTD p50 (s)", f"{mttd['p50']:.2f}")
+        headline_table.add_row("MTTD p95 (s)", f"{mttd['p95']:.2f}")
+        headline_table.add_row("False Positive Rate", f"{fpr:.4f}")
+        headline_table.add_row(
+            "Detection Variance (mean)", f"{repro['detection_variance_mean']:.4f}"
+        )
+        headline_table.add_row(
+            "TP / FP / TN / FN",
+            f"{overall['confusion_matrix']['tp']} / "
+            f"{overall['confusion_matrix']['fp']} / "
+            f"{overall['confusion_matrix']['tn']} / "
+            f"{overall['confusion_matrix']['fn']}",
+        )
+
+        output_console.print(headline_table)
+
+        output_console.print(
+            Panel(
+                f"[bold cyan]Output Files[/bold cyan]\n\n"
+                f"JSON:     [bold]{json_path}[/bold]\n"
+                f"LaTeX:    [bold]{tex_path}[/bold]\n"
+                f"Markdown: [bold]{md_path}[/bold]",
+                title="Evaluation Complete",
+                border_style="green",
+            )
+        )
+
+    except EvaluationError as e:
+        error_console.print(f"[bold red]Evaluation error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except PurpleForgeError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        error_console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+def campaign_command(
+    campaign_path: Path,
+    workspace_dir: Optional[Path],
+) -> None:
+    """
+    Execute a multi-stage campaign against authorized targets.
+
+    Authorized targets only; stages share context for defensive assessment
+    only. No exploitation payloads are generated or executed.
+    """
+    try:
+        from purpleforge.campaign.loader import load_campaign
+        from purpleforge.campaign.runner import CampaignRunner
+        from purpleforge.campaign.killchain import write_diagrams
+        from purpleforge.utils.exceptions import CampaignError
+
+        config = load_config()
+        ws_dir = workspace_dir.resolve() if workspace_dir else config.workspace_dir
+
+        output_console.print(f"[cyan]Loading campaign:[/cyan] {campaign_path}")
+        campaign = load_campaign(campaign_path)
+        output_console.print(
+            f"[green]Campaign loaded:[/green] {campaign.name} "
+            f"({len(campaign.stages)} stages)"
+        )
+
+        runner = CampaignRunner(
+            campaign=campaign,
+            workspace_dir=ws_dir,
+            base_dir=campaign_path.parent.resolve(),
+        )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task(f"Running campaign: {campaign.name}", total=None)
+            result = runner.execute()
+            progress.remove_task(task)
+
+        # Write kill-chain diagrams into the campaign dir.
+        write_diagrams(runner.campaign_dir, campaign, result)
+
+        # Print summary table.
+        table = Table(title=f"Campaign: {campaign.name}", show_header=True)
+        table.add_column("Stage", style="cyan")
+        table.add_column("Status", style="bold")
+        table.add_column("Run ID", style="dim")
+        table.add_column("Error", style="red")
+
+        for sr in result.stages:
+            if sr.status == "success":
+                status_str = "[green]success[/green]"
+            elif sr.status == "failed":
+                status_str = "[red]failed[/red]"
+            else:
+                status_str = "[dim]skipped[/dim]"
+            table.add_row(
+                sr.stage_id,
+                status_str,
+                sr.run_id or "-",
+                sr.error or sr.skip_reason or "-",
+            )
+
+        output_console.print(table)
+        output_console.print(
+            Panel(
+                f"[bold cyan]Campaign artifacts:[/bold cyan] {runner.campaign_dir}\n"
+                f"Kill-chain diagram (Mermaid): {runner.campaign_dir / 'killchain.mmd'}\n"
+                f"Kill-chain diagram (DOT):     {runner.campaign_dir / 'killchain.dot'}\n\n"
+                f"[bold]Overall status:[/bold] {result.overall_status}\n\n"
+                "[dim]Authorized targets only; stages share context; "
+                "defensive assessment only.[/dim]",
+                title="Campaign Complete",
+                border_style="green" if result.overall_status == "success" else "yellow",
+            )
+        )
+
+        if result.overall_status in ("failed", "aborted"):
+            raise typer.Exit(code=1)
+
+    except CampaignError as e:
+        error_console.print(f"[bold red]Campaign error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except PurpleForgeError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        error_console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+# ==================== Mirror Commands ====================
+# Authorized, verified targets only.  Polite crawl.  Defensive static analysis.
+# No exploitation, no form submission, no JS execution, no authenticated crawling.
+# Manual review required for all findings.
+
+def mirror_command(
+    url: str,
+    output: Optional[Path],
+    max_depth: int,
+    max_pages: int,
+    rate_limit: float,
+) -> None:
+    """
+    Mirror a verified target and immediately run static analysis.
+
+    Authorized, verified targets only; polite crawl (robots.txt respected,
+    rate-limited, depth-capped, same-origin only); defensive static analysis
+    only; no exploitation; manual review required.
+    """
+    from purpleforge.mirror.crawler import PoliteCrawler
+    from purpleforge.mirror.static_analysis import run_static_analysis
+    from purpleforge.analysis.findings_schema import summarize
+    from datetime import timezone
+
+    try:
+        allowlist = load_targets()
+        verified_netlocs = list(allowlist.targets.keys())
+
+        if output is None:
+            ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            output = Path("mirror_output") / ts
+        output = output.resolve()
+
+        output_console.print(
+            f"[cyan]Starting polite mirror of:[/cyan] {url}\n"
+            "[dim]Authorized, verified targets only; polite crawl; "
+            "defensive static analysis; no exploitation.[/dim]"
+        )
+
+        crawler = PoliteCrawler(
+            base_url=url,
+            out_dir=output,
+            rate_limit_sec=rate_limit,
+            max_depth=max_depth,
+            max_pages=max_pages,
+            verified_targets=verified_netlocs,
+        )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Crawling...", total=None)
+            manifest = crawler.crawl()
+            progress.remove_task(task)
+
+        pages_table = Table(title="Crawl Summary")
+        pages_table.add_column("Metric", style="cyan")
+        pages_table.add_column("Value", style="white", justify="right")
+        pages_table.add_row("Pages crawled", str(len(manifest.pages)))
+        pages_table.add_row("User-Agent", manifest.user_agent)
+        pages_table.add_row("Output dir", str(output))
+        output_console.print(pages_table)
+
+        output_console.print("[cyan]Running static analysis...[/cyan]")
+        findings_path = output / "mirror_findings.json"
+        findings = run_static_analysis(output, manifest, out_path=findings_path)
+        summary = summarize(findings)
+
+        sev_table = Table(title="Static Analysis Findings")
+        sev_table.add_column("Severity", style="cyan")
+        sev_table.add_column("Count", style="white", justify="right")
+        by_sev = summary.get("by_severity", {})
+        sev_table.add_row("[red]high[/red]", str(by_sev.get("high", 0)))
+        sev_table.add_row("[yellow]medium[/yellow]", str(by_sev.get("medium", 0)))
+        sev_table.add_row("[green]low[/green]", str(by_sev.get("low", 0)))
+        sev_table.add_row("[bold]TOTAL[/bold]", str(summary.get("total", 0)))
+        output_console.print(sev_table)
+
+        output_console.print(
+            Panel(
+                f"[bold green]Mirror complete[/bold green]\n\n"
+                f"Pages:    {len(manifest.pages)}\n"
+                f"Findings: {summary.get('total', 0)}\n"
+                f"Output:   {output}\n"
+                f"Manifest: {output / 'manifest.json'}\n"
+                f"Findings: {findings_path}\n\n"
+                "[dim]Authorized verified targets only; polite crawl; "
+                "defensive static analysis; no exploitation; "
+                "manual review required.[/dim]",
+                border_style="green",
+            )
+        )
+
+    except MirrorError as e:
+        error_console.print(f"[bold red]Mirror error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except PurpleForgeError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        error_console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+def mirror_scan_command(mirror_dir: Path, output: Optional[Path]) -> None:
+    """
+    Run static analysis on an existing mirror directory.
+
+    Authorized, verified targets only; defensive static analysis only;
+    no exploitation; manual review required.
+    """
+    import json as _json
+    from purpleforge.mirror.crawler import CrawlManifest
+    from purpleforge.mirror.static_analysis import run_static_analysis
+    from purpleforge.analysis.findings_schema import summarize
+
+    try:
+        manifest_path = mirror_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise MirrorError(
+                f"No manifest.json found in {mirror_dir}.",
+                hint="Run `purpleforge mirror <url>` to create a mirror first.",
+            )
+
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest_data = _json.load(fh)
+        manifest = CrawlManifest.from_dict(manifest_data)
+
+        findings_path = output.resolve() if output else mirror_dir / "mirror_findings.json"
+
+        output_console.print(
+            f"[cyan]Running static analysis on mirror:[/cyan] {mirror_dir}\n"
+            "[dim]Defensive static analysis only; no exploitation; "
+            "manual review required.[/dim]"
+        )
+
+        findings = run_static_analysis(mirror_dir, manifest, out_path=findings_path)
+        summary = summarize(findings)
+
+        sev_table = Table(title="Static Analysis Findings")
+        sev_table.add_column("Severity", style="cyan")
+        sev_table.add_column("Count", style="white", justify="right")
+        by_sev = summary.get("by_severity", {})
+        sev_table.add_row("[red]high[/red]", str(by_sev.get("high", 0)))
+        sev_table.add_row("[yellow]medium[/yellow]", str(by_sev.get("medium", 0)))
+        sev_table.add_row("[green]low[/green]", str(by_sev.get("low", 0)))
+        sev_table.add_row("[bold]TOTAL[/bold]", str(summary.get("total", 0)))
+        output_console.print(sev_table)
+
+        output_console.print(
+            f"[bold green]Scan complete.[/bold green] "
+            f"{summary.get('total', 0)} finding(s) written to {findings_path}"
+        )
+
+    except MirrorError as e:
+        error_console.print(f"[bold red]Mirror error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        error_console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+def mirror_diff_command(
+    old_manifest: Path,
+    new_manifest: Path,
+    output: Optional[Path],
+) -> None:
+    """
+    Diff two mirror manifests and emit informational findings.
+
+    Authorized, verified targets only; defensive static analysis only;
+    no exploitation; manual review required.
+    """
+    from purpleforge.mirror.differential import MirrorDiff
+    from purpleforge.analysis.findings_schema import dump_findings
+
+    try:
+        output_console.print(
+            f"[cyan]Diffing manifests:[/cyan]\n  old: {old_manifest}\n  new: {new_manifest}"
+        )
+
+        differ = MirrorDiff()
+        diff = differ.diff(old_manifest, new_manifest)
+        findings = differ.to_findings(diff)
+
+        out_dir = output.resolve() if output else new_manifest.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        differ.write_diff(out_dir, diff)
+        findings_path = out_dir / "mirror_diff_findings.json"
+        dump_findings(findings, findings_path)
+
+        diff_table = Table(title="Mirror Diff Summary")
+        diff_table.add_column("Change Type", style="cyan")
+        diff_table.add_column("Count", style="white", justify="right")
+        diff_table.add_row("Pages added", str(len(diff.added_pages)))
+        diff_table.add_row("Pages removed", str(len(diff.removed_pages)))
+        diff_table.add_row("Pages changed", str(len(diff.changed_pages)))
+        diff_table.add_row("Scripts added", str(len(diff.added_scripts)))
+        diff_table.add_row("Scripts removed", str(len(diff.removed_scripts)))
+        diff_table.add_row("Header changes", str(len(diff.header_changes)))
+        diff_table.add_row("[bold]Findings total[/bold]", str(len(findings)))
+        output_console.print(diff_table)
+
+        output_console.print(
+            f"[bold green]Diff complete.[/bold green] Results in {out_dir}"
+        )
+
+    except MirrorError as e:
+        error_console.print(f"[bold red]Mirror error:[/bold red] {e.message}")
+        if e.hint:
+            error_console.print(f"[yellow]Hint:[/yellow] {e.hint}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        error_console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+def audit_verify_command(run_id: str, workspace_dir: Optional[Path]) -> None:
+    """
+    Verify the tamper-evident audit chain for a run.
+
+    Forensic integrity check: re-walks the hash chain of
+    <run_dir>/audit/run_audit.log.jsonl and reports whether all entries
+    are intact.
+
+    Exit codes:
+        0 -- chain intact
+        1 -- log file missing or unreadable (friendly error, no traceback)
+        2 -- chain tampered (first bad sequence number reported)
+    """
+    from purpleforge.audit.hash_chain import verify_log, HashChainLog
+
+    try:
+        config = load_config()
+        workspace_root = workspace_dir.resolve() if workspace_dir else config.workspace_dir
+        workspace_manager = WorkspaceManager(workspace_root)
+
+        try:
+            run_dir = workspace_manager.get_run_dir(run_id)
+        except Exception:
+            error_console.print(
+                f"[bold red]Run not found:[/bold red] {run_id}"
+            )
+            error_console.print(
+                "[yellow]Hint:[/yellow] Use 'purpleforge list-runs' to see available run IDs."
+            )
+            raise typer.Exit(code=1)
+
+        log_path = run_dir / "audit" / "run_audit.log.jsonl"
+
+        if not log_path.exists():
+            error_console.print(
+                f"[bold red]Audit log not found:[/bold red] {log_path}"
+            )
+            error_console.print(
+                "[yellow]Hint:[/yellow] Audit log is written by WebRunner when "
+                "audit_log_enabled=True (default). "
+                "Older runs or runs created without audit logging will not have this file."
+            )
+            raise typer.Exit(code=1)
+
+        # Count entries and gather timestamps.
+        chain_length = 0
+        first_ts: Optional[str] = None
+        last_ts: Optional[str] = None
+        try:
+            chain_log = HashChainLog(log_path)
+            for entry in chain_log.entries():
+                chain_length += 1
+                ts = entry.get("ts", "")
+                if first_ts is None:
+                    first_ts = ts
+                last_ts = ts
+        except Exception as exc:
+            error_console.print(
+                f"[bold red]Failed to read audit log:[/bold red] {exc}"
+            )
+            raise typer.Exit(code=1)
+
+        ok, first_bad = verify_log(log_path)
+
+        # Display results.
+        table = Table(title=f"Audit Chain - run {run_id}")
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="white")
+
+        table.add_row("Chain length", str(chain_length))
+        table.add_row("First event", first_ts or "N/A")
+        table.add_row("Last event", last_ts or "N/A")
+        if ok:
+            table.add_row("Status", "[bold green]INTACT[/bold green]")
+        else:
+            table.add_row(
+                "Status",
+                f"[bold red]TAMPERED (first bad seq: {first_bad})[/bold red]",
+            )
+
+        output_console.print(table)
+
+        if ok:
+            output_console.print("[bold green]Chain INTACT[/bold green] -- all entries verified.")
+            raise typer.Exit(code=0)
+        else:
+            error_console.print(
+                f"[bold red]Chain TAMPERED[/bold red] -- integrity failure at seq {first_bad}."
+            )
+            raise typer.Exit(code=2)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error_console.print(f"[bold red]Audit verify error:[/bold red] {e}")
         raise typer.Exit(code=1)

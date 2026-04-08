@@ -1,0 +1,29 @@
+name: "Demo Two-Stage Campaign"
+description: >
+  Minimal 2-stage campaign for PurpleForge reproducibility demonstration.
+  Stage A (recon) runs a baseline probe; Stage B (follow-up) depends on A
+  and runs a second baseline pass to simulate a follow-up assessment phase.
+  Authorized purple-team and educational use only.
+abort_on_failure: false
+shared_context_keys:
+  - "recon_status"
+
+stages:
+  - id: "stage_a_recon"
+    scenario: "examples/scenarios/demo_baseline.yml"
+    target: "http://localhost"
+    required: true
+    depends_on: []
+    exports:
+      - "recon_status"
+    imports: []
+
+  - id: "stage_b_followup"
+    scenario: "examples/scenarios/demo_baseline.yml"
+    target: "http://localhost"
+    required: false
+    depends_on:
+      - "stage_a_recon"
+    exports: []
+    imports:
+      - "recon_status"

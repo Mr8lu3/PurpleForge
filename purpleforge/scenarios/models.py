@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ScenarioCategory(str, Enum):
@@ -37,13 +37,14 @@ class Target(BaseModel):
     type: TargetType
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("base_url")
-    @classmethod
-    def validate_base_url(cls, v: Optional[str], info: Any) -> Optional[str]:
-        """Validate that web targets have a base_url."""
-        if info.data.get("type") == TargetType.WEB and not v:
+    @model_validator(mode="after")
+    def validate_base_url(self) -> "Target":
+        """Web targets must have a base_url. Field-level validators can't see
+        sibling fields when the field itself is omitted; use a model validator
+        so the rule fires whether or not base_url was supplied."""
+        if self.type == TargetType.WEB and not self.base_url:
             raise ValueError("base_url is required for web targets")
-        return v
+        return self
 
     model_config = {"frozen": False}
 

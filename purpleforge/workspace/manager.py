@@ -93,6 +93,7 @@ class WorkspaceManager:
             (run_dir / "telemetry").mkdir()
             (run_dir / "telemetry" / "raw").mkdir()
             (run_dir / "artifacts").mkdir()
+            (run_dir / "audit").mkdir()
             (run_dir / "correlation").mkdir()
             (run_dir / "reports").mkdir()
             (run_dir / "ground_truth").mkdir()

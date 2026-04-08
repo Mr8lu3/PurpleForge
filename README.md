@@ -437,3 +437,52 @@ For issues, questions, or feature requests, please review the documentation and 
 ---
 
 **Built with safety, ethics, and education as the primary goals.**
+
+---
+
+## Reproducibility and CI
+
+> PurpleForge is for authorized purple-team assessments, defensive evaluation, and educational use only.
+
+![CI](https://github.com/purpleforge/purpleforge/actions/workflows/ci.yml/badge.svg)
+
+PurpleForge ships a fully automated quality-gate pipeline and a Zenodo-ready
+research artifact to support academic reproducibility requirements.
+
+### CI Pipeline (GitHub Actions)
+
+Every push and pull request to `main` triggers a matrix build on Python 3.11
+and 3.12 that runs:
+
+1. Lint — `ruff check` (non-blocking `--exit-zero` while codebase stabilises)
+2. Security scan — `bandit -r purpleforge/ -ll` (medium+ severity fails build)
+3. Dependency audit — `pip-audit --strict` (fail on any known CVE)
+4. Test suite — 370 tests, deselecting one known-duplicate test
+5. Coverage gate — `pytest --cov-fail-under=50` (measured baseline: 52%)
+6. SBOM generation — CycloneDX JSON uploaded as a build artifact
+
+See `.github/workflows/ci.yml` for the full workflow definition.
+
+### Building the Research Artifact
+
+```bash
+make artifact
+# Produces dist/purpleforge_artifact.zip containing:
+#   purpleforge/  tests/  examples/  pyproject.toml  README.md
+#   LICENSE  REPRODUCIBILITY.md  CITATION.cff
+#   .github/workflows/ci.yml  requirements.lock
+# Prints SHA-256 of the zip.
+```
+
+Other useful targets:
+
+```bash
+make test      # run the test suite
+make lint      # ruff check
+make security  # bandit + pip-audit
+make sbom      # generate sbom.json
+make all       # all of the above + artifact
+```
+
+For full reproduction instructions see [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
+For citation metadata see [CITATION.cff](CITATION.cff).

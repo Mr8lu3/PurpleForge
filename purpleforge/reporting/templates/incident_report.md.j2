@@ -6,7 +6,33 @@
 **Status:** {{ status }}
 
 ---
+{% if campaign %}
+## Campaign Summary
 
+**Campaign:** {{ campaign.campaign.name | default('N/A') }}
+**Description:** {{ campaign.campaign.description | default('') }}
+**Overall Status:** {{ campaign.result.overall_status | default('unknown') }}
+**Started:** {{ campaign.result.started_at | default('N/A') }}
+**Completed:** {{ campaign.result.completed_at | default('N/A') }}
+
+### Stage Outcomes
+
+| Stage | Status | Run ID | Error |
+|-------|--------|--------|-------|
+{% for sr in campaign.result.stages | default([]) %}
+| {{ sr.stage_id | default('N/A') }} | {{ sr.status | default('unknown') }} | {{ sr.run_id | default('-') }} | {{ sr.error | default(sr.skip_reason) | default('-') }} |
+{% endfor %}
+
+{% if campaign_mermaid %}
+### Kill-Chain Diagram
+
+```mermaid
+{{ campaign_mermaid }}
+```
+{% endif %}
+
+---
+{% endif %}
 ## Executive Summary
 
 This report documents a controlled security assessment scenario executed using PurpleForge.
@@ -74,13 +100,37 @@ Scenario information not available.
 **Steps with Evidence:** {{ coverage.steps_with_evidence }}
 **Coverage:** {{ "%.1f"|format(coverage.coverage_percentage) }}%
 
+{% if coverage.coverage_confidence_mean is defined %}
+### Confidence Distribution
+
+| Metric | Value |
+|--------|-------|
+| Mean Confidence | {{ "%.2f"|format(coverage.coverage_confidence_mean) }} |
+| Median Confidence | {{ "%.2f"|format(coverage.coverage_confidence_median) }} |
+
+| Tier | Description | Count |
+|------|-------------|-------|
+| A (>= 0.80) | High-quality match | {{ coverage.tier_distribution.A | default(0) }} |
+| B (>= 0.55) | Moderate-quality match | {{ coverage.tier_distribution.B | default(0) }} |
+| C (< 0.55) | Low-quality match | {{ coverage.tier_distribution.C | default(0) }} |
+| none | No evidence | {{ coverage.tier_distribution.none | default(0) }} |
+
+{% endif %}
 ### Step Coverage Details
 {% if coverage.step_coverage %}
+{% if coverage.coverage_confidence_mean is defined %}
+| Step ID | Type | Has Evidence | Evidence Count | Confidence | Tier |
+|---------|------|--------------|----------------|------------|------|
+{% for step in coverage.step_coverage %}
+| {{ step.step_id | default('N/A') }} | {{ step.step_type | default('N/A') }} | {{ "Yes" if step.has_evidence else "No" }} | {{ step.evidence_count | default(0) }} | {{ "%.2f"|format(step.best_confidence) if step.best_confidence is defined else "N/A" }} | {{ step.quality_tier | default('N/A') }} |
+{% endfor %}
+{% else %}
 | Step ID | Type | Has Evidence | Evidence Count |
 |---------|------|--------------|----------------|
 {% for step in coverage.step_coverage %}
-| {{ step.step_id }} | {{ step.step_type }} | {{ "Yes" if step.has_evidence else "No" }} | {{ step.evidence_count }} |
+| {{ step.step_id | default('N/A') }} | {{ step.step_type | default('N/A') }} | {{ "Yes" if step.has_evidence else "No" }} | {{ step.evidence_count | default(0) }} |
 {% endfor %}
+{% endif %}
 {% endif %}
 {% else %}
 Coverage analysis not available.
@@ -161,6 +211,102 @@ Based on the executed scenario, consider implementing the following detection me
 
 ---
 
+{% if mirror_findings %}
+## Mirror Static Findings
+
+> **Disclaimer:** These findings are produced by heuristic static analysis of
+> mirrored site assets (authorized, verified targets only; polite crawl;
+> defensive static analysis only; no exploitation performed).
+> False positives are expected.  Manual review is required for every finding.
+> Severity labels are heuristic indicators only — they do NOT represent CVSS scores.
+
+### Summary
+
+{% if mirror_findings_summary %}
+**Total Findings:** {{ mirror_findings_summary.total | default(0) }}
+
+| Severity | Count |
+|----------|-------|
+| High     | {{ mirror_findings_summary.by_severity.high | default(0) }} |
+| Medium   | {{ mirror_findings_summary.by_severity.medium | default(0) }} |
+| Low      | {{ mirror_findings_summary.by_severity.low | default(0) }} |
+
+{% endif %}
+
+### Top 10 Findings
+
+| # | Title | Severity | Category | Location |
+|---|-------|----------|----------|----------|
+{% for finding in mirror_findings[:10] %}
+| {{ loop.index }} | {{ finding.title | default('N/A') }} | {{ finding.severity | default('N/A') }} | {{ finding.category | default('N/A') }} | {{ finding.location | default(finding.file_path) | default('N/A') }} |
+{% endfor %}
+
+---
+
+{% endif %}
+{% if binary_findings %}
+## Binary Analysis Findings
+
+> **Disclaimer:** These findings are produced by static heuristic analysis and may include
+> false positives. Manual review is required. Authorized binaries only.
+> Severity labels are heuristic indicators only — they do NOT represent CVSS scores.
+
+### Summary
+
+{% if binary_findings_summary %}
+**Total Findings:** {{ binary_findings_summary.total | default(0) }}
+
+#### By Severity
+
+| Severity | Count |
+|----------|-------|
+| High     | {{ binary_findings_summary.by_severity.high | default(0) }} |
+| Medium   | {{ binary_findings_summary.by_severity.medium | default(0) }} |
+| Low      | {{ binary_findings_summary.by_severity.low | default(0) }} |
+
+#### By Category
+
+| Category | Count |
+|----------|-------|
+{% for cat, count in binary_findings_summary.by_category.items() %}
+| {{ cat | default('N/A') }} | {{ count | default(0) }} |
+{% endfor %}
+{% else %}
+Summary not available.
+{% endif %}
+
+### Top Findings
+
+| # | Title | Severity | Confidence | Location |
+|---|-------|----------|------------|----------|
+{% set severity_order = {'high': 0, 'medium': 1, 'low': 2} %}
+{% set sorted_findings = binary_findings | sort(attribute='severity') %}
+{% for finding in binary_findings[:10] %}
+| {{ loop.index }} | {{ finding.title | default('N/A') }} | {{ finding.severity | default('N/A') }} | {{ finding.confidence | default('N/A') }} | {{ finding.location | default('N/A') }} |
+{% endfor %}
+
+---
+
+{% endif %}
+{% if audit_integrity %}
+## Audit Integrity
+
+| Property | Value |
+|----------|-------|
+| Chain Length | {{ audit_integrity.chain_length }} |
+| Status | {% if audit_integrity.intact %}INTACT{% else %}TAMPERED (first bad seq: {{ audit_integrity.first_bad_seq }}){% endif %} |
+| First Event | {{ audit_integrity.first_ts | default('N/A') }} |
+| Last Event | {{ audit_integrity.last_ts | default('N/A') }} |
+
+**Methodology:** Each log entry is linked to its predecessor via SHA-256
+(SHA-256(prev_hash + canonical_json(payload) + seq + ts)).  Any post-write
+mutation, deletion, or reordering of entries is detectable by re-walking
+the chain.  This mechanism provides integrity evidence for authorised
+security assessments conducted under PurpleForge's ethical guardrails.
+
+---
+
+{% endif %}
 ## Platform Information
 
 **Operating System:** {{ platform.os if platform.os else 'Unknown' }}
@@ -183,6 +329,22 @@ Key files:
 - `telemetry/normalized_events.jsonl` - Normalized event stream
 - `correlation/timeline.json` - Event timeline
 - `correlation/coverage.json` - Coverage metrics
+
+---
+
+## Data Protection
+
+Telemetry and report content produced by PurpleForge is subject to a redaction
+pipeline that removes identifiable personal data (email addresses, UK National
+Insurance numbers, postcodes, telephone numbers) and secrets (Bearer tokens,
+JWTs, AWS access keys, API keys, private key blocks, passwords) at write time.
+This supports compliance with the data minimisation and integrity/confidentiality
+principles under **UK DPA 2018** and **GDPR Article 5(1)(c) and (f)**.
+Operators remain responsible for ensuring that assessment targets are authorised,
+that personal data collected during an engagement is handled appropriately, and
+that data-subject rights obligations are met.  Redaction is heuristic and does
+not guarantee complete removal of all personal data; manual review of logs is
+recommended for high-sensitivity engagements.
 
 ---
 

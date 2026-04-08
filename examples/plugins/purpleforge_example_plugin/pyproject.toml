@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "purpleforge-example-plugin"
+version = "0.1.0"
+description = "Example PurpleForge step handler plugin (http_head_baseline)"
+requires-python = ">=3.11"
+dependencies = [
+    "purpleforge>=0.1.0",
+    "requests>=2.31.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["purpleforge_example_plugin*"]
+
+[project.entry-points."purpleforge.step_handlers"]
+http_head_baseline = "purpleforge_example_plugin.handlers"

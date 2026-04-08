@@ -417,6 +417,240 @@ def export_report(
     commands.export_report_command(run_id, format, output)
 
 
+@app.command(name="analyze-binary")
+def analyze_binary(
+    binary_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        help="Path to binary to analyze (AUTHORIZED binaries only; defensive static analysis)",
+    ),
+    run_id: Optional[str] = typer.Option(
+        None,
+        "--run-id",
+        "-r",
+        help="Associate output with existing run -> runs/<run_id>/analysis/",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Custom output directory (ignored if --run-id set)",
+    ),
+    timeout: int = typer.Option(
+        300,
+        "--timeout",
+        help="Ghidra analysis timeout in seconds",
+    ),
+) -> None:
+    """
+    Static binary analysis using Ghidra (defensive only).
+
+    Authorized binaries only. Produces normalized findings for inclusion in reports.
+    Output location precedence: --run-id > --output > ./analysis_output/<timestamp>/
+    """
+    commands.analyze_binary_command(binary_path, run_id, output, timeout)
+
+
+@app.command()
+def evaluate(
+    dataset_path: Path = typer.Argument(
+        ...,
+        help="Path to labelled dataset YAML file",
+        exists=True,
+    ),
+    runs: int = typer.Option(
+        3,
+        "--runs",
+        "-n",
+        help="Number of runs per dataset item (enables reproducibility variance)",
+        min=1,
+    ),
+    workspace_dir: Optional[Path] = typer.Option(
+        None,
+        "--workspace",
+        "-w",
+        help="Workspace directory for evaluation runs (default: from config)",
+    ),
+    output_dir: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory for metrics files (default: ./evaluation_output/<UTC-timestamp>/)",
+    ),
+) -> None:
+    """
+    Evaluate scenarios against an authorized labelled dataset.
+
+    Evaluates scenarios against authorized labelled datasets only; defensive
+    evaluation. Runs each dataset item N times, collects raw observations,
+    and computes precision, recall, F1, MTTD (mean time to detect),
+    reproducibility variance, and false-positive rate.
+
+    Outputs metrics.json, metrics.tex, and metrics.md into --output directory.
+    """
+    commands.evaluate_command(dataset_path, runs, workspace_dir, output_dir)
+
+
+@app.command()
+def campaign(
+    campaign_path: Path = typer.Argument(
+        ...,
+        help="Path to campaign YAML file",
+        exists=True,
+    ),
+    workspace_dir: Optional[Path] = typer.Option(
+        None,
+        "--workspace",
+        "-w",
+        help="Workspace directory for runs (default: from config)",
+    ),
+) -> None:
+    """
+    Execute a multi-stage campaign against authorized targets.
+
+    A campaign sequences multiple scenarios with dependency ordering and
+    shared context propagation. Authorized targets only; stages share
+    context for defensive assessment only.
+
+    Example:
+        purpleforge campaign campaigns/web_recon.yml --workspace ./runs
+    """
+    commands.campaign_command(campaign_path, workspace_dir)
+
+
+@app.command()
+def mirror(
+    url: str = typer.Argument(
+        ...,
+        help="Target base URL to mirror (must be in verified allowlist).",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory (default: ./mirror_output/<timestamp>/).",
+    ),
+    max_depth: int = typer.Option(
+        2,
+        "--max-depth",
+        help="BFS depth cap (default 2, hard max 4). Polite crawl only.",
+        min=1,
+        max=4,
+    ),
+    max_pages: int = typer.Option(
+        100,
+        "--max-pages",
+        help="Maximum total pages to crawl (default 100).",
+        min=1,
+    ),
+    rate_limit: float = typer.Option(
+        1.0,
+        "--rate-limit",
+        help="Minimum seconds between requests (default 1.0).",
+    ),
+) -> None:
+    """
+    Mirror a verified target site and run static vulnerability analysis.
+
+    AUTHORIZED, VERIFIED TARGETS ONLY.  Polite crawl: robots.txt respected,
+    rate-limited (default 1 req/sec), depth-capped (default 2), same-origin
+    only, max 100 pages.  Defensive static analysis only — no exploitation,
+    no form submission, no JS execution, no authenticated crawling.
+    Manual review required for all findings.
+
+    Example:
+        purpleforge mirror http://example.com --max-depth 2 --max-pages 50
+    """
+    commands.mirror_command(url, output, max_depth, max_pages, rate_limit)
+
+
+@app.command(name="mirror-scan")
+def mirror_scan(
+    mirror_dir: Path = typer.Argument(
+        ...,
+        help="Path to an existing mirror directory (produced by `purpleforge mirror`).",
+        exists=True,
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output path for findings JSON (default: <mirror_dir>/mirror_findings.json).",
+    ),
+) -> None:
+    """
+    Run static vulnerability analysis on an existing mirror directory.
+
+    AUTHORIZED, VERIFIED TARGETS ONLY.  Defensive static analysis only;
+    no exploitation; manual review required.
+
+    Example:
+        purpleforge mirror-scan ./mirror_output/20260407T120000Z/
+    """
+    commands.mirror_scan_command(mirror_dir, output)
+
+
+@app.command(name="mirror-diff")
+def mirror_diff(
+    old_manifest: Path = typer.Argument(
+        ...,
+        help="Path to the older manifest.json.",
+        exists=True,
+    ),
+    new_manifest: Path = typer.Argument(
+        ...,
+        help="Path to the newer manifest.json.",
+        exists=True,
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory for diff JSON and findings (default: new_manifest parent dir).",
+    ),
+) -> None:
+    """
+    Diff two mirror manifests and emit informational change-detection findings.
+
+    AUTHORIZED, VERIFIED TARGETS ONLY.  Defensive static analysis only;
+    no exploitation; manual review required.
+
+    Example:
+        purpleforge mirror-diff old/manifest.json new/manifest.json --output ./diff_out/
+    """
+    commands.mirror_diff_command(old_manifest, new_manifest, output)
+
+
+# ==================== Audit Commands ====================
+
+audit_app = typer.Typer(help="Audit chain commands")
+app.add_typer(audit_app, name="audit")
+
+
+@audit_app.command(name="verify")
+def audit_verify(
+    run_id: str = typer.Argument(
+        ...,
+        help="Run ID whose audit chain to verify",
+    ),
+    workspace_dir: Optional[Path] = typer.Option(
+        None,
+        "--workspace",
+        "-w",
+        help="Workspace directory (default: from config)",
+    ),
+) -> None:
+    """
+    Verify the tamper-evident audit chain for a run.
+
+    Forensic integrity check: re-walks the SHA-256 hash chain stored in
+    <run_dir>/audit/run_audit.log.jsonl.
+
+    Exit codes: 0 intact, 1 missing/error, 2 tampered.
+    """
+    commands.audit_verify_command(run_id, workspace_dir)
+
+
 def main() -> None:
     """Main entry point."""
     app()

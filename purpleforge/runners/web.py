@@ -4,10 +4,12 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin, quote
 
 import requests
 
+from purpleforge.audit.events import AuditEmitter
+from purpleforge.audit.redaction import Redactor
+from purpleforge.runners.plugins import StepContext, registry
 from purpleforge.scenarios.models import Scenario, ScenarioStep
 from purpleforge.utils.exceptions import RunnerError
 from purpleforge.utils.logging import get_logger
@@ -16,7 +18,18 @@ logger = get_logger(__name__)
 
 
 class WebRunner:
-    """Execute web assessment scenarios safely."""
+    """Execute web assessment scenarios safely.
+
+    Step dispatch is handled through the :class:`StepPluginRegistry`.  New step
+    types can be added without modifying this class — register a handler with
+    ``@purpleforge.runners.plugins.register("your_type")``.
+
+    All operations must target authorized systems only, for defensive assessment
+    purposes only.
+    """
+
+    # Class-level flag so entry points are discovered at most once per process.
+    _entry_points_loaded: bool = False
 
     def __init__(
         self,
@@ -25,6 +38,8 @@ class WebRunner:
         base_url: str,
         timeout: int = 30,
         max_response_log_size: int = 200,
+        redaction_enabled: bool = True,
+        audit_log_enabled: bool = True,
     ):
         """
         Initialize web runner.
@@ -35,12 +50,23 @@ class WebRunner:
             base_url: Target base URL
             timeout: Default timeout for requests
             max_response_log_size: Max chars to log from response
+            redaction_enabled: Whether to redact PII/secrets from telemetry
+            audit_log_enabled: Whether to emit hash-chained audit events
         """
+        # Ensure entry points are loaded once per process.
+        if not WebRunner._entry_points_loaded:
+            WebRunner._entry_points_loaded = True
+            registry.load_entry_points()
+
         self.scenario = scenario
         self.run_dir = run_dir
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_response_log_size = max_response_log_size
+        self._redactor = Redactor(enabled=redaction_enabled)
+        self._audit: Optional[AuditEmitter] = (
+            AuditEmitter(run_dir) if audit_log_enabled else None
+        )
 
         self.telemetry_dir = run_dir / "telemetry"
         self.ground_truth_dir = run_dir / "ground_truth"
@@ -55,6 +81,11 @@ class WebRunner:
 
     def __enter__(self) -> "WebRunner":
         """Context manager entry."""
+        if self._audit:
+            self._audit.run_created(
+                run_id=self.run_dir.name,
+                scenario_name=self.scenario.name,
+            )
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -74,7 +105,7 @@ class WebRunner:
         """
         logger.info(f"Starting web scenario: {self.scenario.name}")
 
-        results = {
+        results: Dict[str, Any] = {
             "scenario_name": self.scenario.name,
             "started_at": datetime.utcnow().isoformat(),
             "steps": [],
@@ -120,19 +151,30 @@ class WebRunner:
             f"Scenario complete: {results['successful_steps']}/{results['total_steps']} steps successful"
         )
 
+        if self._audit:
+            self._audit.run_completed(
+                status="completed",
+                counts={
+                    "total": results["total_steps"],
+                    "successful": results["successful_steps"],
+                    "failed": results["failed_steps"],
+                },
+            )
+
         return results
 
     def execute_step(self, step: ScenarioStep) -> Dict[str, Any]:
         """
-        Execute a single scenario step.
+        Execute a single scenario step via the plugin registry.
 
         Args:
             step: Step to execute
 
         Returns:
-            Step result dictionary
+            Step result dictionary. On unknown step type the result has an
+            ``error`` key and ``success=False`` but no exception is raised.
         """
-        step_result = {
+        step_result: Dict[str, Any] = {
             "step_id": step.id,
             "step_type": step.type,
             "description": step.description,
@@ -141,21 +183,32 @@ class WebRunner:
             "evidence_collected": [],
         }
 
-        # Dispatch to appropriate handler
-        handlers = {
-            "http_get_baseline": self._handle_http_get_baseline,
-            "reflected_xss_probe_safe": self._handle_reflected_xss_probe,
-            "sqli_error_probe_safe": self._handle_sqli_error_probe,
-        }
+        if self._audit:
+            self._audit.step_started(step.id)
 
-        handler = handlers.get(step.type)
-        if not handler:
-            step_result["error"] = f"Unknown step type: {step.type}"
-            logger.error(step_result["error"])
+        handler = registry.get(step.type)
+        if handler is None:
+            msg = (
+                f"Unknown step type: {step.type}. "
+                f"Registered: {registry.all_types()}"
+            )
+            step_result["error"] = msg
+            logger.error(msg)
+            # Write ground truth even for unknown types so the record is complete.
+            self._write_ground_truth(step, step_result)
+            if self._audit:
+                self._audit.step_completed(step.id, "failed")
             return step_result
 
+        ctx = StepContext(
+            base_url=self.base_url,
+            timeout=self.timeout,
+            log_request=self._log_request,
+            logger=logger,
+        )
+
         try:
-            handler(step, step_result)
+            handler(step, step_result, ctx)
             step_result["success"] = True
         except Exception as e:
             step_result["error"] = str(e)
@@ -164,151 +217,12 @@ class WebRunner:
         # Write ground truth
         self._write_ground_truth(step, step_result)
 
+        if self._audit:
+            self._audit.step_completed(
+                step.id, "success" if step_result["success"] else "failed"
+            )
+
         return step_result
-
-    def _handle_http_get_baseline(
-        self, step: ScenarioStep, result: Dict[str, Any]
-    ) -> None:
-        """
-        Handle HTTP GET baseline request.
-
-        Parameters:
-            - path: URL path to request (default: "/")
-        """
-        path = step.parameters.get("path", "/")
-        url = urljoin(self.base_url, path)
-
-        logger.info(f"GET {url}")
-
-        response = requests.get(
-            url,
-            timeout=step.timeout_seconds,
-            allow_redirects=True,
-            verify=True,
-        )
-
-        self._log_request(
-            step_id=step.id,
-            method="GET",
-            url=url,
-            status_code=response.status_code,
-            response=response,
-        )
-
-        result["evidence_collected"].append("http_request_log")
-        result["status_code"] = response.status_code
-
-    def _handle_reflected_xss_probe(
-        self, step: ScenarioStep, result: Dict[str, Any]
-    ) -> None:
-        """
-        Handle safe reflected XSS probe.
-
-        Checks if input is reflected in response without executing scripts.
-
-        Parameters:
-            - path: URL path to test
-            - parameter: Query parameter name
-            - probe_string: Safe probe string (default: "<test>")
-        """
-        path = step.parameters.get("path", "/")
-        param_name = step.parameters.get("parameter", "q")
-        probe = step.parameters.get("probe_string", "<test>")
-
-        url = urljoin(self.base_url, path)
-        params = {param_name: probe}
-
-        logger.info(f"XSS probe: GET {url}?{param_name}={probe}")
-
-        response = requests.get(
-            url,
-            params=params,
-            timeout=step.timeout_seconds,
-            allow_redirects=True,
-            verify=True,
-        )
-
-        self._log_request(
-            step_id=step.id,
-            method="GET",
-            url=response.url,
-            status_code=response.status_code,
-            response=response,
-            probe_info={"type": "xss_reflection", "probe": probe},
-        )
-
-        # Check for reflection
-        reflected = probe in response.text
-        result["evidence_collected"].append("http_request_log")
-        result["reflected"] = reflected
-        result["status_code"] = response.status_code
-
-        if reflected:
-            logger.info("Probe string reflected in response")
-        else:
-            logger.info("Probe string not reflected")
-
-    def _handle_sqli_error_probe(
-        self, step: ScenarioStep, result: Dict[str, Any]
-    ) -> None:
-        """
-        Handle safe SQL injection error probe.
-
-        Checks for SQL error messages without data extraction.
-
-        Parameters:
-            - path: URL path to test
-            - parameter: Query parameter name
-            - probe_string: Safe probe string (default: "'")
-        """
-        path = step.parameters.get("path", "/")
-        param_name = step.parameters.get("parameter", "id")
-        probe = step.parameters.get("probe_string", "'")
-
-        url = urljoin(self.base_url, path)
-        params = {param_name: probe}
-
-        logger.info(f"SQLi probe: GET {url}?{param_name}={probe}")
-
-        response = requests.get(
-            url,
-            params=params,
-            timeout=step.timeout_seconds,
-            allow_redirects=True,
-            verify=True,
-        )
-
-        self._log_request(
-            step_id=step.id,
-            method="GET",
-            url=response.url,
-            status_code=response.status_code,
-            response=response,
-            probe_info={"type": "sqli_error", "probe": probe},
-        )
-
-        # Check for common SQL error patterns
-        error_patterns = [
-            "sql syntax",
-            "mysql_fetch",
-            "pg_query",
-            "sqlite_query",
-            "odbc_exec",
-            "syntax error",
-            "unterminated string",
-        ]
-
-        response_lower = response.text.lower()
-        error_detected = any(pattern in response_lower for pattern in error_patterns)
-
-        result["evidence_collected"].append("http_request_log")
-        result["error_detected"] = error_detected
-        result["status_code"] = response.status_code
-
-        if error_detected:
-            logger.info("SQL error pattern detected in response")
-        else:
-            logger.info("No SQL error pattern detected")
 
     def _log_request(
         self,
@@ -330,7 +244,7 @@ class WebRunner:
             response: Response object
             probe_info: Optional probe metadata
         """
-        log_entry = {
+        log_entry: Dict[str, Any] = {
             "timestamp": datetime.utcnow().isoformat(),
             "step_id": step_id,
             "method": method,
@@ -348,6 +262,7 @@ class WebRunner:
         if probe_info:
             log_entry["probe_info"] = probe_info
 
+        log_entry = self._redactor.redact_dict(log_entry)
         self.web_requests_log.write(json.dumps(log_entry) + "\n")
         self.web_requests_log.flush()
 

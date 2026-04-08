@@ -1,0 +1,30 @@
+name: "Demo Baseline Web Assessment"
+description: >
+  Minimal single-step scenario used for reproducibility demonstration.
+  Performs a safe HTTP GET baseline against localhost — no exploitation,
+  no data extraction. Authorized purple-team and educational use only.
+category: web
+mode: assess
+ownership_verification: false
+
+target:
+  type: web
+  base_url: "http://localhost"
+  metadata:
+    description: "Local demonstration target"
+    environment: "lab"
+
+steps:
+  - id: "step_001_baseline"
+    type: "http_get_baseline"
+    description: "Establish baseline by requesting root path"
+    parameters:
+      path: "/"
+    expected_evidence:
+      - "http_request_log"
+      - "response_status_code"
+    timeout_seconds: 15
+    continue_on_failure: true
+
+att_ck_techniques:
+  - "T1595.001"

@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: >
+  If you use PurpleForge in academic work, please cite it using
+  the metadata below.
+type: software
+title: >
+  PurpleForge: A reproducible, quantitatively-evaluated purple-team
+  assessment framework with cross-source normalised findings
+authors:
+  - name: "PurpleForge Contributors"
+version: "0.1.0"
+date-released: "2026-04-07"
+year: 2026
+license: MIT
+repository-code: "https://github.com/purpleforge/purpleforge"
+keywords:
+  - purple team
+  - security assessment
+  - reproducibility
+  - ATT&CK
+  - defensive evaluation
+  - ethical hacking
+  - SBOM
+  - audit log
+abstract: >
+  PurpleForge is a CLI-first, ethically-constrained purple-team assessment
+  platform designed for authorized defensive evaluation and academic research.
+  It enforces ownership verification before any web-target interaction,
+  produces hash-chained JSONL audit logs, correlates telemetry against
+  ATT&CK techniques, and generates quantitative coverage metrics across
+  assessment campaigns. All nine implementation phases are covered by 370+
+  automated tests with a CI pipeline on Python 3.11 and 3.12.
