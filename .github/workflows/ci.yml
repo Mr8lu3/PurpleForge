@@ -47,15 +47,12 @@ jobs:
       - name: Dependency vulnerability audit (pip-audit)
         # --strict: exit non-zero if any vulnerability is found in the
         # resolved dependency graph. Update deps to fix.
-        run: pip-audit --strict
+        # --skip-editable: PurpleForge itself is installed editable and is
+        # not on PyPI; pip-audit would otherwise fail trying to look it up.
+        run: pip-audit --strict --skip-editable
 
       - name: Run test suite
-        # test_web_target_requires_base_url is intentionally deselected; the
-        # validator behaviour it tests is covered by an upstream model test.
-        run: >
-          pytest tests/
-          --deselect tests/test_scenarios.py::test_web_target_requires_base_url
-          -q
+        run: pytest tests/ -q
 
       - name: Coverage gate
         # Measured baseline: 52% (run 2026-04-08, 370 tests, 4957 stmts).
@@ -65,7 +62,6 @@ jobs:
         # REPRODUCIBILITY.md for full coverage breakdown.
         run: >
           pytest tests/
-          --deselect tests/test_scenarios.py::test_web_target_requires_base_url
           --cov=purpleforge
           --cov-report=term
           --cov-fail-under=60
