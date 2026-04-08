@@ -45,11 +45,13 @@ jobs:
         run: bandit -r purpleforge/ -ll
 
       - name: Dependency vulnerability audit (pip-audit)
-        # --strict: exit non-zero if any vulnerability is found in the
-        # resolved dependency graph. Update deps to fix.
-        # --skip-editable: PurpleForge itself is installed editable and is
-        # not on PyPI; pip-audit would otherwise fail trying to look it up.
-        run: pip-audit --strict --skip-editable
+        # PurpleForge is installed editable and not on PyPI. --strict
+        # escalates pip-audit's "skipped editable" warning to a failure,
+        # so we audit a frozen requirements list with editable entries
+        # filtered out instead of auditing the environment directly.
+        run: |
+          pip freeze --exclude-editable > /tmp/audit-requirements.txt
+          pip-audit --strict -r /tmp/audit-requirements.txt
 
       - name: Run test suite
         run: pytest tests/ -q

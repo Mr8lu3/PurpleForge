@@ -35,7 +35,8 @@ lint:
 # ── Security ──────────────────────────────────────────────────────────────────
 security:
 	$(BANDIT) -r purpleforge/ -ll
-	$(PIPAUDIT) --strict --skip-editable
+	@$(PIP) freeze --exclude-editable > /tmp/audit-requirements.txt
+	$(PIPAUDIT) --strict -r /tmp/audit-requirements.txt
 
 # ── SBOM ──────────────────────────────────────────────────────────────────────
 sbom:
