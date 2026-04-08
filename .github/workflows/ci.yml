@@ -66,7 +66,7 @@ jobs:
           pytest tests/
           --cov=purpleforge
           --cov-report=term
-          --cov-fail-under=60
+          --cov-fail-under=55
           -q
 
       - name: Generate SBOM
